@@ -12,4 +12,99 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+version: "3.6"
 
+volumes:
+  keys:
+    external: true
+  pbft-shared:
+    external: true
+
+# Create a network, this will be used for adding more containers later
+networks:
+  localnet:
+    external: true
+
+services:
+  validator-2:
+    image: hyperledger/sawtooth-validator:chime
+    container_name: validator-2
+    volumes:
+      - keys:/keys
+      - pbft-shared:/pbft-shared
+    expose:
+      - 4004
+    networks:
+      localnet:
+    command: |
+      bash -c "
+      if [ -e /pbft-shared/validators/validator-2.priv ]; then
+        cp /pbft-shared/validators/validator-2.pub /etc/sawtooth/keys/validator.pub
+        cp /pbft-shared/validators/validator-2.priv /etc/sawtooth/keys/validator.priv
+      fi &&
+      if [ ! -e /etc/sawtooth/keys/validator.priv ]; then
+        sawadm keygen
+        mkdir -p /pbft-shared/validators || true
+        cp /etc/sawtooth/keys/validator.pub /pbft-shared/validators/validator-2.pub
+        cp /etc/sawtooth/keys/validator.priv /pbft-shared/validators/validator-2.priv
+      fi &&
+      sawtooth keygen &&
+      sawtooth-validator -vv \
+        --endpoint tcp://validator-2:8800 \
+        --bind component:tcp://eth0:4004 \
+        --bind consensus:tcp://eth0:5050 \
+        --bind network:tcp://eth0:8800 \
+        --scheduler parallel \
+        --peering static \
+        --maximum-peer-connectivity 10000 \
+        --peers tcp://validator-1:8800
+      "
+
+  rest-api-2:
+    image: hyperledger/sawtooth-rest-api:chime
+    container_name: rest-api-2
+    expose:
+      - 8008
+    ports:
+      - "8009:8008"
+    networks:
+      localnet:
+    entrypoint: sawtooth-rest-api --connect tcp://validator-2:4004 --bind rest-api-2:8008 -vv
+
+  settings-tp-2:
+    image: hyperledger/sawtooth-settings-tp:chime
+    container_name: settings-tp-2
+    networks:
+      localnet:
+    entrypoint: settings-tp -vv --connect tcp://validator-2:4004
+
+  pbft-2:
+    image: hyperledger/sawtooth-pbft-engine:nightly
+    container_name: pbft-2
+    depends_on:
+      - validator-2
+    networks:
+      localnet:
+    command: pbft-engine -vv --connect tcp://validator-2:5050
+    stop_signal: SIGKILL
+
+  processor-2:
+    container_name: pc-processor-2
+    image: docker.pkg.github.com/arsulegai/produce-consume/pc-processor:latest
+    networks:
+      localnet:
+    command: "bash -c \"\
+      /produce-consume -C tcp://validator-2:4004 -vvv
+    \""
+
+  cli-2:
+    container_name: pc-cli-2
+    image: docker.pkg.github.com/arsulegai/produce-consume/pc-cli:latest
+    volumes:
+      - keys:/keys
+    networks:
+      localnet:
+    working_dir: /cli
+    command: "bash -c \"\
+    tail -f /dev/null \
+    \""

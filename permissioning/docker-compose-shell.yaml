@@ -1,0 +1,10 @@
+
+  shell:
+    image: hyperledger/sawtooth-shell:chime
+    container_name: shell
+    networks:
+      localnet:
+    entrypoint: "bash -c \"\
+        sawtooth keygen && \
+        tail -f /dev/null \
+        \""

@@ -12,4 +12,119 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+version: "3.6"
 
+volumes:
+  keys:
+    name: keys
+  pbft-shared:
+    name: pbft-shared
+
+# Create a network, this will be used for adding more containers later
+networks:
+  localnet:
+    name: localnet
+
+services:
+  validator-1:
+    image: hyperledger/sawtooth-validator:chime
+    container_name: validator-1
+    volumes:
+      - keys:/keys
+      - pbft-shared:/pbft-shared
+    expose:
+      - 4004
+    networks:
+      localnet:
+    command: |
+      bash -c "
+        if [ -e /pbft-shared/validators/validator-1.priv ]; then
+          cp /pbft-shared/validators/validator-1.pub /etc/sawtooth/keys/validator.pub
+          cp /pbft-shared/validators/validator-1.priv /etc/sawtooth/keys/validator.priv
+        fi &&
+        if [ ! -e /etc/sawtooth/keys/validator.priv ]; then
+          sawadm keygen
+          mkdir -p /pbft-shared/validators || true
+          cp /etc/sawtooth/keys/validator.pub /pbft-shared/validators/validator-1.pub
+          cp /etc/sawtooth/keys/validator.priv /pbft-shared/validators/validator-1.priv
+        fi &&
+        if [ ! -e config-genesis.batch ]; then
+          sawset genesis -k /etc/sawtooth/keys/validator.priv -o config-genesis.batch
+        fi &&
+        while [[ ! -f /pbft-shared/validators/validator-2.pub || \
+                 ! -f /pbft-shared/validators/validator-3.pub || \
+                 ! -f /pbft-shared/validators/validator-4.pub ]];
+        do sleep 1; done
+        echo sawtooth.consensus.pbft.members=\\['\"'$$(cat /pbft-shared/validators/validator-1.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-2.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-3.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-4.pub)'\"'\\] &&
+        if [ ! -e config.batch ]; then
+         sawset proposal create \
+            -k /etc/sawtooth/keys/validator.priv \
+            sawtooth.consensus.algorithm.name=pbft \
+            sawtooth.consensus.algorithm.version=1.0 \
+            sawtooth.consensus.pbft.members=\\['\"'$$(cat /pbft-shared/validators/validator-1.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-2.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-3.pub)'\"','\"'$$(cat /pbft-shared/validators/validator-4.pub)'\"'\\] \
+            sawtooth.publisher.max_batches_per_block=1200 \
+            -o config.batch
+        fi &&
+        if [ ! -e /var/lib/sawtooth/genesis.batch ]; then
+          sawadm genesis config-genesis.batch config.batch
+        fi
+        cp -r /pbft-shared/* /keys/
+        sawtooth keygen
+        sawtooth-validator -vv \
+          --endpoint tcp://validator-1:8800 \
+          --bind component:tcp://eth0:4004 \
+          --bind consensus:tcp://eth0:5050 \
+          --bind network:tcp://eth0:8800 \
+          --scheduler parallel \
+          --peering static \
+          --maximum-peer-connectivity 10000
+      "
+
+  rest-api-1:
+    image: hyperledger/sawtooth-rest-api:chime
+    container_name: rest-api-1
+    expose:
+      - 8008
+    ports:
+      - "8008:8008"
+    networks:
+      localnet:
+    entrypoint: sawtooth-rest-api --connect tcp://validator-1:4004 --bind rest-api-1:8008 -vv
+
+  settings-tp-1:
+    image: hyperledger/sawtooth-settings-tp:chime
+    container_name: settings-tp-1
+    networks:
+      localnet:
+    entrypoint: settings-tp -vv --connect tcp://validator-1:4004
+
+  pbft-1:
+    image: hyperledger/sawtooth-pbft-engine:nightly
+    container_name: pbft-1
+    depends_on:
+      - validator-1
+    networks:
+      localnet:
+    command: pbft-engine -vv --connect tcp://validator-1:5050
+    stop_signal: SIGKILL
+
+  processor-1:
+    container_name: pc-processor-1
+    image: docker.pkg.github.com/arsulegai/produce-consume/pc-processor:latest
+    networks:
+      localnet:
+    command: "bash -c \"\
+      /produce-consume -C tcp://validator-1:4004 -vvv
+    \""
+
+  cli-1:
+    container_name: pc-cli-1
+    image: docker.pkg.github.com/arsulegai/produce-consume/pc-cli:latest
+    volumes:
+      - keys:/keys
+    networks:
+      localnet:
+    working_dir: /cli
+    command: "bash -c \"\
+    tail -f /dev/null \
+    \""
