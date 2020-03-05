@@ -98,6 +98,13 @@ services:
       localnet:
     entrypoint: settings-tp -vv --connect tcp://validator-1:4004
 
+  identity-tp-1:
+    image: hyperledger/sawtooth-identity-tp:chime
+    container_name: identity-tp-1
+    networks:
+      localnet:
+    entrypoint: identity-tp -vv --connect tcp://validator-1:4004
+
   pbft-1:
     image: hyperledger/sawtooth-pbft-engine:nightly
     container_name: pbft-1
@@ -109,7 +116,7 @@ services:
     stop_signal: SIGKILL
 
   processor-1:
-    container_name: pc-processor-1
+    container_name: pc-processor-1  
     image: docker.pkg.github.com/arsulegai/produce-consume/pc-processor:latest
     networks:
       localnet:

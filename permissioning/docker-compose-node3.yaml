@@ -79,6 +79,13 @@ services:
       localnet:
     entrypoint: settings-tp -vv --connect tcp://validator-3:4004
 
+  identity-tp-3:
+    image: hyperledger/sawtooth-identity-tp:chime
+    container_name: identity-tp-3
+    networks:
+      localnet:
+    entrypoint: identity-tp -vv --connect tcp://validator-3:4004
+
   pbft-3:
     image: hyperledger/sawtooth-pbft-engine:nightly
     container_name: pbft-3
