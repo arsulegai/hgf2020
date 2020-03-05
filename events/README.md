@@ -16,10 +16,20 @@ delta change being published to event listener.
 $ docker-compose up
 ```
 
+```
+ERROR: unauthorized: Your request could not be authenticated by the GitHub Packages service. Please ensure your access token is valid and has the appropriate scopes configured.
+```
+- If above error is observed while pulling docker images,
+create new github developer token and execute the below command.
+
+```
+docker login -u USERNAME -p TOKEN docker.pkg.github.com
+```
+
 - Attach the event listener to the validator instance running
 
 ```shell_script
-$ docker-compose -f event-handler.yaml
+$ docker-compose -f event-handler.yaml up
 ```
 
 - Send a sample transaction through the `pc-cli` container
