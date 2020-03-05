@@ -1,0 +1,140 @@
+# Copyright 2020 Walmart Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+version: "3.6"
+
+volumes:
+  keys:
+  project:
+
+# Create a network, this will be used for adding more containers later
+networks:
+  localnet:
+    name: localnet
+
+services:
+  validator:
+    image: hyperledger/sawtooth-validator:chime
+    container_name: validator
+    volumes:
+      - keys:/keys
+    expose:
+      - 4004
+    networks:
+      localnet:
+    entrypoint: "bash -c \"\
+        sawadm keygen && \
+        sawtooth keygen && \
+        cp /etc/sawtooth/keys/* /keys/ && \
+        sawset genesis  -k /etc/sawtooth/keys/validator.priv && \
+        sawset proposal create \
+          -k /etc/sawtooth/keys/validator.priv \
+          sawtooth.swa.administrators=$$(cat /etc/sawtooth/keys/validator.pub) \
+          sawtooth.consensus.algorithm.name=Devmode \
+          sawtooth.consensus.algorithm.version=0.1 \
+          -o config.batch && \
+        sawadm genesis config-genesis.batch config.batch && \
+        sawtooth-validator -vv \
+          --endpoint tcp://validator:8800 \
+          --bind component:tcp://eth0:4004 \
+          --bind network:tcp://eth0:8800 \
+          --bind consensus:tcp://eth0:5050 \
+        \""
+
+  rest-api:
+    image: hyperledger/sawtooth-rest-api:chime
+    container_name: rest-api
+    expose:
+      - 8008
+    ports:
+      - "8008:8008"
+    networks:
+      localnet:
+    entrypoint: sawtooth-rest-api --connect tcp://validator:4004 --bind rest-api:8008 -vv
+
+  shell:
+    image: hyperledger/sawtooth-shell:chime
+    container_name: shell
+    networks:
+      localnet:
+    entrypoint: "bash -c \"\
+        sawtooth keygen && \
+        tail -f /dev/null \
+        \""
+
+  settings-tp:
+    image: hyperledger/sawtooth-settings-tp:chime
+    container_name: settings-tp
+    networks:
+      localnet:
+    entrypoint: settings-tp -vv --connect tcp://validator:4004
+
+  devmode-rust:
+    image: hyperledger/sawtooth-devmode-engine-rust:chime
+    container_name: devmode-engine
+    depends_on:
+      - validator
+    networks:
+      localnet:
+    command: |
+      devmode-engine-rust -v --connect tcp://validator:5050
+    stop_signal: SIGKILL
+
+  processor:
+    container_name: pc-processor
+    image: docker.pkg.github.com/arsulegai/produce-consume/pc-processor:latest
+    volumes:
+      - project:/project
+    networks:
+      localnet:
+    command: "bash -c \"\
+      /produce-consume -C tcp://validator:4004 -vvv
+    \""
+
+  processor-produce:
+    container_name: pc-processor-produce
+    image: docker.pkg.github.com/arsulegai/produce-consume/pc-processor:produce
+    volumes:
+      - project:/project
+    networks:
+      localnet:
+    command: "bash -c \"\
+      /produce-consume -C tcp://validator:4004 -vvv
+    \""
+
+  cli:
+    container_name: pc-cli
+    image: docker.pkg.github.com/arsulegai/produce-consume/pc-cli:latest
+    volumes:
+      - project:/project
+      - keys:/keys
+    networks:
+      localnet:
+    working_dir: /cli
+    command: "bash -c \"\
+    tail -f /dev/null \
+    \""
+
+  cli-produce:
+    container_name: pc-cli-produce
+    image: docker.pkg.github.com/arsulegai/produce-consume/pc-cli:produce
+    volumes:
+      - project:/project
+      - keys:/keys
+    networks:
+      localnet:
+    working_dir: /cli
+    command: "bash -c \"\
+    tail -f /dev/null \
+    \""
