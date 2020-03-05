@@ -40,14 +40,27 @@ thus when it is attempted to join the network the other
 validators won't allow that particular validator becoming
 part of the network.
 
-**Transaction Permissioning**
+- Run the following command to add the user key to the
+administration list
 
-```
-TODO
+```shell_script
+$ sawset proposal create --key /pbft-shared/validators/validator-1.priv sawtooth.identity.allowed_keys=$(cat ~/.sawtooth/keys/root.pub) --url http://rest-api-1:8008
 ```
 
-## Commands and Screenshots
+- Run the following command to add a new policy to the network
 
+```shell_script
+$ sawtooth identity policy create all_are_welcome_here "PERMIT_KEY *" --url http://rest-api-1:8008
 ```
-TODO
+
+It can be verified using
+
+```shell_script
+$ sawtooth identity policy list --url http://rest-api-1:8008
+```
+
+- Run the following command to create a new role and assign roles
+
+```shell_script
+$ sawtooth identity role create transactor all_are_welcome_here
 ```
