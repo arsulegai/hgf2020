@@ -5,6 +5,9 @@ to the Sawtooth network. It is for educational purpose only.
 One may monitor the logs on the terminal of event-listener to
 understand what is being sent back by the smart-contract.
 
+This example demostrates events for block commit and state
+delta change being published to event listener.
+
 ## Hands-On
 
 - Bring up a single node validator network.
