@@ -69,7 +69,7 @@ services:
     expose:
       - 8008
     ports:
-      - "8011:8008"
+      - "8012:8008"
     networks:
       localnet:
     entrypoint: sawtooth-rest-api --connect tcp://validator-5:4004 --bind rest-api-5:8008 -vv
